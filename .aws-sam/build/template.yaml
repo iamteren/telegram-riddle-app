@@ -1,28 +1,38 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Resources:
-  RiddleAgentFunction:
+  RiddleFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: coding-riddle-agent
+      CodeUri: RiddleFunction
       Handler: lambda_function.lambda_handler
       Runtime: python3.12
-      CodeUri: RiddleAgentFunction
       Timeout: 30
       Policies:
-      - Statement:
-          Effect: Allow
-          Action: bedrock:InvokeModel
-          Resource: '*'
+      - AmazonBedrockFullAccess
       Events:
-        ApiEvent:
+        RiddleApi:
           Type: HttpApi
           Properties:
             Path: /riddle
-            Method: POST
+            Method: ANY
+            ApiId:
+              Ref: RiddleApi
     Metadata:
-      SamResourceId: RiddleAgentFunction
+      SamResourceId: RiddleFunction
+  RiddleApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+        - https://iamteren.github.io
+        AllowHeaders:
+        - Content-Type
+        AllowMethods:
+        - POST
+        - OPTIONS
+        MaxAge: 600
 Outputs:
   ApiUrl:
     Value:
-      Fn::Sub: https://${ServerlessHttpApi}.execute-api.us-east-1.amazonaws.com/riddle
+      Fn::Sub: https://${RiddleApi}.execute-api.${AWS::Region}.amazonaws.com/riddle
