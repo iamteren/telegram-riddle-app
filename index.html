@@ -6,6 +6,7 @@
   <title>Coding Riddle Agent</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -21,12 +22,30 @@
 
     /* Left panel - problem */
     #problem-panel { width: 40%; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
-    #problem-header { padding: 12px 16px; background: #21262d; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+    #problem-header { padding: 12px 16px; background: #21262d; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
     #problem-title { font-size: 14px; font-weight: bold; color: #58a6ff; }
     #problem-tags { font-size: 11px; color: #8b949e; }
-    #problem-body { padding: 16px; overflow-y: auto; flex: 1; font-size: 13px; line-height: 1.7;  }
-    #hint-box { padding: 12px 16px; background: #1c2128; border-top: 1px solid #30363d; font-size: 12px; color: #f0883e; display: none; }
-    #hint-btn { margin: 8px 16px; padding: 6px 12px; background: #21262d; border: 1px solid #30363d; color: #8b949e; border-radius: 6px; cursor: pointer; font-size: 12px; }
+
+    /* History list */
+    #history-panel { border-bottom: 1px solid #30363d; flex-shrink: 0; max-height: 140px; overflow-y: auto; background: #0d1117; }
+    #history-header { padding: 6px 16px; font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; background: #161b22; border-bottom: 1px solid #30363d; }
+    .hist-item { padding: 6px 16px; cursor: pointer; font-size: 12px; color: #c9d1d9; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #21262d; }
+    .hist-item:hover { background: #21262d; }
+    .hist-item.active { background: #1f3a5f; color: #58a6ff; }
+    .hist-num { color: #58a6ff; font-size: 11px; min-width: 24px; }
+    .hist-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-solved { color: #3fb950; font-size: 11px; }
+
+    #problem-body { padding: 16px; overflow-y: auto; flex: 1; font-size: 13px; line-height: 1.7; }
+    #problem-body h1, #problem-body h2, #problem-body h3 { color: #58a6ff; margin: 12px 0 6px; font-size: 14px; }
+    #problem-body code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #f0883e; }
+    #problem-body pre { background: #21262d; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #problem-body pre code { background: none; padding: 0; color: #e6edf3; }
+    #problem-body strong { color: #e6edf3; }
+    #problem-body ul, #problem-body ol { padding-left: 20px; margin: 6px 0; }
+
+    #hint-box { padding: 12px 16px; background: #1c2128; border-top: 1px solid #30363d; font-size: 12px; color: #f0883e; display: none; flex-shrink: 0; }
+    #hint-btn { margin: 8px 16px; padding: 6px 12px; background: #21262d; border: 1px solid #30363d; color: #8b949e; border-radius: 6px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
     #hint-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 
     /* Right panel - editor */
@@ -43,7 +62,7 @@
     #next-btn:hover { border-color: #58a6ff; }
 
     /* Output */
-    #output-panel { height: 160px; background: #0d1117; border-top: 1px solid #30363d; overflow-y: auto; padding: 12px 16px; font-size: 13px; font-family: monospace;  }
+    #output-panel { height: 160px; background: #0d1117; border-top: 1px solid #30363d; overflow-y: auto; padding: 12px 16px; font-size: 13px; font-family: monospace; }
     .output-correct { color: #3fb950; }
     .output-wrong { color: #f85149; }
     .output-thinking { color: #8b949e; font-style: italic; }
@@ -54,7 +73,6 @@
     .spinner { width: 40px; height: 40px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
@@ -66,7 +84,7 @@
 
 <div id="topbar">
   <h2>⚡ Coding Riddles</h2>
-  <select id="difficulty-select" onchange="loadNewRiddle()">
+  <select id="difficulty-select">
     <option value="easy">Easy</option>
     <option value="medium" selected>Medium</option>
     <option value="hard">Hard</option>
@@ -82,6 +100,12 @@
       <span id="problem-title">Problem #1</span>
       <span id="problem-tags">Arrays · Medium</span>
     </div>
+
+    <div id="history-panel">
+      <div id="history-header">Past Problems</div>
+      <div id="history-list"></div>
+    </div>
+
     <div id="problem-body">Loading...</div>
     <button id="hint-btn" onclick="getHint()">💡 Get Hint</button>
     <div id="hint-box"></div>
@@ -102,14 +126,18 @@
 </div>
 
 <script>
-  const API_URL = "https://yax7kpyns0.execute-api.us-east-1.amazonaws.com/riddle"; // ← replace this
+  const API_URL = "https://yax7kpyns0.execute-api.us-east-1.amazonaws.com/riddle";
 
-  // Persistence
+  // --- State ---
   let score = parseInt(localStorage.getItem("riddleScore") || "0");
   let problemCount = parseInt(localStorage.getItem("riddleProblemCount") || "1");
   let chatHistory = JSON.parse(localStorage.getItem("riddleChatHistory") || "null");
+  let problemHistory = JSON.parse(localStorage.getItem("riddleProblemHistory") || "[]");
+  let currentProblemIndex = parseInt(localStorage.getItem("riddleCurrentIndex") || "-1");
+
   document.getElementById("score-val").innerText = score;
 
+  // --- Monaco Editor ---
   require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs" }});
   require(["vs/editor/editor.main"], function () {
     window.editor = monaco.editor.create(document.getElementById("editor"), {
@@ -121,9 +149,69 @@
       automaticLayout: true,
       scrollBeyondLastLine: false
     });
-    loadNewRiddle();
+
+    // On load: restore saved problem or fetch new one
+    const saved = localStorage.getItem("riddleCurrentProblem");
+    if (saved) {
+      const p = JSON.parse(saved);
+      displayProblem(p.title, p.tags, p.body);
+      document.getElementById("loading").style.display = "none";
+    } else {
+      loadNewRiddle();
+    }
   });
 
+  // --- Problem History ---
+  function saveProblem(title, tags, body) {
+    const p = { title, tags, body, solved: false };
+    localStorage.setItem("riddleCurrentProblem", JSON.stringify(p));
+
+    const exists = problemHistory.findIndex(x => x.title === title);
+    if (exists === -1) {
+      problemHistory.push(p);
+      currentProblemIndex = problemHistory.length - 1;
+    } else {
+      currentProblemIndex = exists;
+    }
+    localStorage.setItem("riddleProblemHistory", JSON.stringify(problemHistory));
+    localStorage.setItem("riddleCurrentIndex", currentProblemIndex);
+    renderHistoryList();
+  }
+
+  function displayProblem(title, tags, body) {
+    document.getElementById("problem-title").innerText = title;
+    document.getElementById("problem-tags").innerText = tags;
+    document.getElementById("problem-body").innerHTML = marked.parse(body);
+    document.getElementById("hint-box").style.display = "none";
+    document.getElementById("hint-box").innerHTML = "";
+    renderHistoryList();
+  }
+
+  function renderHistoryList() {
+    const container = document.getElementById("history-list");
+    if (!container || problemHistory.length === 0) return;
+    container.innerHTML = problemHistory.map((p, i) => `
+      <div class="hist-item ${i === currentProblemIndex ? 'active' : ''}" onclick="loadFromHistory(${i})">
+        <span class="hist-num">#${i + 1}</span>
+        <span class="hist-title">${p.title}</span>
+        ${p.solved ? '<span class="hist-solved">✓</span>' : ''}
+      </div>
+    `).join("");
+  }
+
+  function loadFromHistory(index) {
+    currentProblemIndex = index;
+    localStorage.setItem("riddleCurrentIndex", index);
+    const p = problemHistory[index];
+    localStorage.setItem("riddleCurrentProblem", JSON.stringify(p));
+    chatHistory = null;
+    localStorage.removeItem("riddleChatHistory");
+    displayProblem(p.title, p.tags, p.body);
+    document.getElementById("output-panel").innerHTML = '<span class="output-thinking">Output will appear here...</span>';
+    window.editor && window.editor.setValue("# Write your solution here\n\ndef solution():\n    pass\n");
+  }
+
+  // --- API ---
   async function callAgent(input) {
     const body = { input, chat_history: chatHistory };
     const res = await fetch(API_URL, {
@@ -139,11 +227,13 @@
     return data.reply;
   }
 
+  // --- Load New Problem ---
   async function loadNewRiddle() {
     document.getElementById("loading").style.display = "flex";
-    document.getElementById("hint-box").style.display = "none";
     document.getElementById("output-panel").innerHTML = '<span class="output-thinking">Output will appear here...</span>';
     window.editor && window.editor.setValue("# Write your solution here\n\ndef solution():\n    pass\n");
+    chatHistory = null;
+    localStorage.removeItem("riddleChatHistory");
 
     const difficulty = document.getElementById("difficulty-select").value;
     const prompt = `Give me a NEW ${difficulty} difficulty coding problem. Format it exactly like this:
@@ -159,21 +249,22 @@ Do not give the solution yet.`;
       const tagsMatch = reply.match(/TAGS:\s*(.+)/);
       const problemMatch = reply.match(/PROBLEM:\s*([\s\S]+)/);
 
-      document.getElementById("problem-title").innerText =
-        `Problem #${problemCount} — ${titleMatch ? titleMatch[1].trim() : "Challenge"}`;
-      document.getElementById("problem-tags").innerText =
-        tagsMatch ? tagsMatch[1].trim() : difficulty;
-      document.getElementById("problem-body").innerHTML =
-        problemMatch ? marked.parse(problemMatch[1].trim()) : marked.parse(reply);
+      const title = `Problem #${problemCount} - ${titleMatch ? titleMatch[1].trim() : "Challenge"}`;
+      const tags = tagsMatch ? tagsMatch[1].trim() : difficulty;
+      const body = problemMatch ? problemMatch[1].trim() : reply;
 
       problemCount++;
       localStorage.setItem("riddleProblemCount", problemCount);
+
+      saveProblem(title, tags, body);
+      displayProblem(title, tags, body);
     } catch(e) {
       document.getElementById("problem-body").innerHTML = "Error loading problem. Check your API URL.";
     }
     document.getElementById("loading").style.display = "none";
   }
 
+  // --- Submit Answer ---
   async function submitAnswer() {
     const code = window.editor.getValue();
     document.getElementById("output-panel").innerHTML = '<span class="output-thinking">⏳ Evaluating your solution...</span>';
@@ -191,6 +282,14 @@ Do not give the solution yet.`;
         score += 10;
         localStorage.setItem("riddleScore", score);
         document.getElementById("score-val").innerText = score;
+
+        // Mark current problem as solved in history
+        if (currentProblemIndex >= 0) {
+          problemHistory[currentProblemIndex].solved = true;
+          localStorage.setItem("riddleProblemHistory", JSON.stringify(problemHistory));
+          renderHistoryList();
+        }
+
         document.getElementById("output-panel").innerHTML =
           `<span class="output-correct">✅ Correct! +10 points\n\n${reply}</span>`;
       } else if (isWrong) {
@@ -206,12 +305,16 @@ Do not give the solution yet.`;
     document.getElementById("run-btn").disabled = false;
   }
 
+  // --- Hint ---
   async function getHint() {
     document.getElementById("hint-box").style.display = "block";
-    document.getElementById("hint-box").innerText = "💡 Getting hint...";
+    document.getElementById("hint-box").innerHTML = "💡 Getting hint...";
     const hint = await callAgent("Give me a hint for this problem without revealing the solution.");
-    document.getElementById("hint-box").innerText = "💡 " + hint;
+    document.getElementById("hint-box").innerHTML = "💡 " + marked.parse(hint);
   }
+
+  // --- Init history list on load ---
+  renderHistoryList();
 </script>
 </body>
 </html>
