@@ -5,28 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Coding Riddle Agent</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-    /* Top bar */
     #topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #161b22; border-bottom: 1px solid #30363d; }
     #topbar h2 { font-size: 15px; color: #58a6ff; }
     #score-badge { background: #238636; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }
     #difficulty-select { background: #21262d; color: #e6edf3; border: 1px solid #30363d; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
-    /* Main layout */
     #main { display: flex; flex: 1; overflow: hidden; }
 
-    /* Left panel - problem */
     #problem-panel { width: 40%; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
     #problem-header { padding: 12px 16px; background: #21262d; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
     #problem-title { font-size: 14px; font-weight: bold; color: #58a6ff; }
     #problem-tags { font-size: 11px; color: #8b949e; }
 
-    /* History list */
     #history-panel { border-bottom: 1px solid #30363d; flex-shrink: 0; max-height: 140px; overflow-y: auto; background: #0d1117; }
     #history-header { padding: 6px 16px; font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; background: #161b22; border-bottom: 1px solid #30363d; }
     .hist-item { padding: 6px 16px; cursor: pointer; font-size: 12px; color: #c9d1d9; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #21262d; }
@@ -48,30 +43,29 @@
     #hint-btn { margin: 8px 16px; padding: 6px 12px; background: #21262d; border: 1px solid #30363d; color: #8b949e; border-radius: 6px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
     #hint-btn:hover { border-color: #58a6ff; color: #58a6ff; }
 
-    /* Right panel - editor */
     #editor-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     #editor-topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #161b22; border-bottom: 1px solid #30363d; }
     #lang-label { font-size: 12px; color: #8b949e; }
     #editor { flex: 1; }
 
-    /* Bottom bar */
     #bottom-bar { display: flex; gap: 8px; padding: 10px 12px; background: #161b22; border-top: 1px solid #30363d; }
     #run-btn { flex: 1; padding: 10px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; }
     #run-btn:hover { background: #2ea043; }
     #next-btn { padding: 10px 16px; background: #21262d; color: #58a6ff; border: 1px solid #30363d; border-radius: 6px; font-size: 14px; cursor: pointer; }
     #next-btn:hover { border-color: #58a6ff; }
 
-    /* Output */
     #output-panel { height: 160px; background: #0d1117; border-top: 1px solid #30363d; overflow-y: auto; padding: 12px 16px; font-size: 13px; font-family: monospace; }
     .output-correct { color: #3fb950; }
     .output-wrong { color: #f85149; }
     .output-thinking { color: #8b949e; font-style: italic; }
 
-    /* Loading overlay */
     #loading { position: fixed; inset: 0; background: #0d1117; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
     #loading h3 { color: #58a6ff; margin-bottom: 12px; }
     .spinner { width: 40px; height: 40px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Fallback textarea when Monaco fails */
+    #code-fallback { flex: 1; background: #0d1117; color: #e6edf3; border: none; padding: 16px; font-family: monospace; font-size: 14px; resize: none; outline: none; display: none; }
   </style>
 </head>
 <body>
@@ -100,12 +94,10 @@
       <span id="problem-title">Problem #1</span>
       <span id="problem-tags">Arrays · Medium</span>
     </div>
-
     <div id="history-panel">
       <div id="history-header">Past Problems</div>
       <div id="history-list"></div>
     </div>
-
     <div id="problem-body">Loading...</div>
     <button id="hint-btn" onclick="getHint()">💡 Get Hint</button>
     <div id="hint-box"></div>
@@ -117,6 +109,7 @@
       <span style="font-size:12px; color:#8b949e;">Write your solution below</span>
     </div>
     <div id="editor"></div>
+    <textarea id="code-fallback" placeholder="# Write your solution here&#10;&#10;def solution():&#10;    pass"></textarea>
     <div id="bottom-bar">
       <button id="run-btn" onclick="submitAnswer()">▶ Submit Solution</button>
       <button id="next-btn" onclick="loadNewRiddle()">Next →</button>
@@ -137,20 +130,18 @@
 
   document.getElementById("score-val").innerText = score;
 
-  // --- Monaco Editor ---
-  require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs" }});
-  require(["vs/editor/editor.main"], function () {
-    window.editor = monaco.editor.create(document.getElementById("editor"), {
-      value: "# Write your solution here\n\ndef solution():\n    pass\n",
-      language: "python",
-      theme: "vs-dark",
-      fontSize: 14,
-      minimap: { enabled: false },
-      automaticLayout: true,
-      scrollBeyondLastLine: false
-    });
+  // --- Code editor helpers (Monaco or fallback textarea) ---
+  function getCode() {
+    if (window.editor) return window.editor.getValue();
+    return document.getElementById("code-fallback").value;
+  }
+  function setCode(val) {
+    if (window.editor) window.editor.setValue(val);
+    else document.getElementById("code-fallback").value = val;
+  }
 
-    // On load: restore saved problem or fetch new one
+  // --- Start app immediately — don't wait for Monaco ---
+  document.addEventListener("DOMContentLoaded", function () {
     const saved = localStorage.getItem("riddleCurrentProblem");
     if (saved) {
       const p = JSON.parse(saved);
@@ -159,13 +150,37 @@
     } else {
       loadNewRiddle();
     }
+
+    // Load Monaco in background — enhances editor if it loads, no-op if it doesn't
+    const monacoScript = document.createElement("script");
+    monacoScript.src = "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js";
+    monacoScript.onload = function () {
+      require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs" }});
+      require(["vs/editor/editor.main"], function () {
+        window.editor = monaco.editor.create(document.getElementById("editor"), {
+          value: document.getElementById("code-fallback").value,
+          language: "python",
+          theme: "vs-dark",
+          fontSize: 14,
+          minimap: { enabled: false },
+          automaticLayout: true,
+          scrollBeyondLastLine: false
+        });
+        // Hide fallback, show Monaco
+        document.getElementById("code-fallback").style.display = "none";
+        document.getElementById("editor").style.display = "flex";
+      });
+    };
+    // Show fallback textarea immediately while Monaco loads
+    document.getElementById("editor").style.display = "none";
+    document.getElementById("code-fallback").style.display = "block";
+    document.head.appendChild(monacoScript);
   });
 
   // --- Problem History ---
   function saveProblem(title, tags, body) {
     const p = { title, tags, body, solved: false };
     localStorage.setItem("riddleCurrentProblem", JSON.stringify(p));
-
     const exists = problemHistory.findIndex(x => x.title === title);
     if (exists === -1) {
       problemHistory.push(p);
@@ -208,7 +223,7 @@
     localStorage.removeItem("riddleChatHistory");
     displayProblem(p.title, p.tags, p.body);
     document.getElementById("output-panel").innerHTML = '<span class="output-thinking">Output will appear here...</span>';
-    window.editor && window.editor.setValue("# Write your solution here\n\ndef solution():\n    pass\n");
+    setCode("# Write your solution here\n\ndef solution():\n    pass\n");
   }
 
   // --- API ---
@@ -231,7 +246,7 @@
   async function loadNewRiddle() {
     document.getElementById("loading").style.display = "flex";
     document.getElementById("output-panel").innerHTML = '<span class="output-thinking">Output will appear here...</span>';
-    window.editor && window.editor.setValue("# Write your solution here\n\ndef solution():\n    pass\n");
+    setCode("# Write your solution here\n\ndef solution():\n    pass\n");
     chatHistory = null;
     localStorage.removeItem("riddleChatHistory");
 
@@ -266,7 +281,7 @@ Do not give the solution yet.`;
 
   // --- Submit Answer ---
   async function submitAnswer() {
-    const code = window.editor.getValue();
+    const code = getCode();
     document.getElementById("output-panel").innerHTML = '<span class="output-thinking">⏳ Evaluating your solution...</span>';
     document.getElementById("run-btn").disabled = true;
 
@@ -282,14 +297,11 @@ Do not give the solution yet.`;
         score += 10;
         localStorage.setItem("riddleScore", score);
         document.getElementById("score-val").innerText = score;
-
-        // Mark current problem as solved in history
         if (currentProblemIndex >= 0) {
           problemHistory[currentProblemIndex].solved = true;
           localStorage.setItem("riddleProblemHistory", JSON.stringify(problemHistory));
           renderHistoryList();
         }
-
         document.getElementById("output-panel").innerHTML =
           `<span class="output-correct">✅ Correct! +10 points\n\n${reply}</span>`;
       } else if (isWrong) {
@@ -313,7 +325,6 @@ Do not give the solution yet.`;
     document.getElementById("hint-box").innerHTML = "💡 " + marked.parse(hint);
   }
 
-  // --- Init history list on load ---
   renderHistoryList();
 </script>
 </body>
