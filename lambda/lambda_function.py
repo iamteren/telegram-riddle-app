@@ -7,10 +7,12 @@ def run_coding_riddle_agent(user_input, chat_history=None):
     model_id = "amazon.nova-pro-v1:0"
 
     system_prompt = [{"text": (
-        "You are an interactive coding riddle master agent. Your job is to present "
-        "clever programming puzzles, data structure riddles, or algorithmic brainteasers "
-        "to the user. Evaluate their answers, give hints if they struggle, and keep track "
-        "of their score or progress in a friendly, conversational tone."
+        "You are an interactive coding riddle master agent. Present clever programming "
+        "puzzles, data structure riddles, and algorithmic brainteasers at the requested "
+        "difficulty level. Format problems clearly with title, tags, description, examples, "
+        "constraints, and expected output. Evaluate solutions thoroughly — check correctness, "
+        "time complexity, space complexity, and edge cases. Give hints when asked without "
+        "revealing the full solution. Track progress and encourage the user."
     )}]
 
     messages = chat_history if chat_history else []
@@ -21,40 +23,42 @@ def run_coding_riddle_agent(user_input, chat_history=None):
             modelId=model_id,
             messages=messages,
             system=system_prompt,
-            inferenceConfig={"maxTokens": 1000, "temperature": 0.7}
+            inferenceConfig={"maxTokens": 2000, "temperature": 0.7}
         )
         reply = response["output"]["message"]["content"][0]["text"]
         messages.append({"role": "assistant", "content": [{"text": reply}]})
         return reply, messages
     except ClientError as e:
-        return f"Error invoking Amazon Nova: {e}", messages
+        return f"Error: {e}", messages
 
 def lambda_handler(event, context):
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS"
+    }
+
+    if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+        return {"statusCode": 200, "headers": headers, "body": ""}
+
     try:
         body = json.loads(event.get("body", "{}"))
-
-        # Telegram webhook path
-        if "message" in body:
-            user_text = body["message"].get("text", "Give me a riddle.")
-            reply, _ = run_coding_riddle_agent(user_text)
-            return {
-                "statusCode": 200,
-                "headers": {"Access-Control-Allow-Origin": "*"},
-                "body": json.dumps({"reply": reply})
-            }
-
-        # Frontend / Mini App path
         user_input = body.get("input", "Give me a medium difficulty data structure riddle.")
-        reply, _ = run_coding_riddle_agent(user_input)
+        chat_history = body.get("chat_history", None)
+
+        reply, updated_history = run_coding_riddle_agent(user_input, chat_history)
+
         return {
             "statusCode": 200,
-            "headers": {"Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"reply": reply})
+            "headers": headers,
+            "body": json.dumps({
+                "reply": reply,
+                "chat_history": updated_history
+            })
         }
-
     except Exception as e:
         return {
             "statusCode": 500,
-            "headers": {"Access-Control-Allow-Origin": "*"},
+            "headers": headers,
             "body": json.dumps({"error": str(e)})
         }
